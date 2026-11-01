@@ -1,0 +1,19 @@
+{
+  "name": "krisi_biology_studio_online_v2",
+  "version": "1.0.0",
+  "description": "This is a **separate FastAPI web app**, not a drop-in replacement for your Streamlit `app.py`. Your current v0.9 Streamlit Studio stays unchanged. The two databases **do not sync**. Do **not** deploy this preview publicly or enter real student personal information.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

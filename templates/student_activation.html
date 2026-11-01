@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+    <title>Student Activation | KRISI Biology Studio</title>
+</head>
+<body>
+    <main>
+        <h1>Welcome to KRISI Biology Studio</h1>
+
+        <p id="activation-message" role="status">
+            Checking your invitation...
+        </p>
+
+        <form id="activation-form" hidden>
+            <label for="new-password">
+                Create password
+            </label>
+            <input
+                id="new-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="14"
+                required
+            >
+
+            <label for="confirm-password">
+                Confirm password
+            </label>
+            <input
+                id="confirm-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="14"
+                required
+            >
+
+            <button type="submit">
+                Activate Student Account
+            </button>
+        </form>
+    </main>
+
+    <script
+        type="module"
+        src="/static/student_activation.js"
+    ></script>
+</body>
+</html>

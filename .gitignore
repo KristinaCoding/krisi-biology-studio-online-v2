@@ -1,0 +1,34 @@
+﻿.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite
+*.sqlite3
+# Frontend dependencies
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# PyCharm
+.idea/
+.vscode/
+
+# Backup files
+*.bak
+*.BAK
+*.backup
+*_before_*.py
+portal_before_redesign.py
+
+# Private keys
+*.pem
+*.key
+
+# Additional development snapshots
+portal_supabase_login_working.py
+# Development snapshots
+*_before_*.js
