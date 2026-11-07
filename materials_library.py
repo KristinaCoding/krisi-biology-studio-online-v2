@@ -18,7 +18,7 @@ ALLOWED={".pdf":"application/pdf",".png":"image/png",".jpg":"image/jpeg",
 
 def storage_config():
     base=os.environ.get("SUPABASE_URL","").rstrip("/")
-    key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","")
+    key=os.environ.get("SUPABASE_SECRET_KEY","") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY","")
     bucket=os.environ.get("BIOLOGY_MATERIALS_BUCKET","biology-private-materials")
     if not base.startswith("https://") or not key or not bucket:
         raise HTTPException(503,"Private Supabase Storage is not configured")
