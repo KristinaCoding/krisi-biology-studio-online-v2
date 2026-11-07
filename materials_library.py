@@ -113,7 +113,7 @@ def register(app,require,page,token,verifycsrf,E):
             raise HTTPException(413,"File must be between 1 byte and 10 MB")
         signatures={".pdf":b"%PDF-",".png":bytes.fromhex("89504e470d0a1a0a"),
                     ".jpg":bytes.fromhex("ffd8ff"),".jpeg":bytes.fromhex("ffd8ff"),
-                    ".pptx":b"PK\\x03\\x04",".docx":b"PK\\x03\\x04"}
+                    ".pptx":bytes.fromhex("504b0304"),".docx":bytes.fromhex("504b0304")}
         signature=signatures[suffix]
         if not data.startswith(signature):
             raise HTTPException(400,"File signature does not match type")
