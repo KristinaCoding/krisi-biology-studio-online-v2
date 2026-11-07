@@ -185,7 +185,7 @@ def teacher(req:Request):
         '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Teacher navigation">'
         '<small>TEACHER WORKSPACE</small>'
         '<a href="#section-1">Invite students</a><a href="#section-2">Lessons</a>'
-        '<a href="#section-3">Quizzes</a><a href="#section-4">Results</a>'
+        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="#section-4">Results</a>'
         '<a href="#section-5">Bookings</a></nav><div class="dashboard-main">'
         '<p class="dashboard-intro">Your teaching workspace · Manage lessons and learning in one place.</p>'
         '<div class="dashboard-stats">'
