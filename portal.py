@@ -29,12 +29,16 @@ def conn():
     return c
 with conn() as c:
     c.executescript('''
-    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,display TEXT,role TEXT,passhash TEXT);
+    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,display TEXT,role TEXT,passhash TEXT,supabase_user_id TEXT UNIQUE);
     CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,student_id INTEGER,title TEXT,meeting_url TEXT);
     CREATE TABLE IF NOT EXISTS quizzes(id INTEGER PRIMARY KEY,student_id INTEGER,title TEXT,questions TEXT);
     CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY,quiz_id INTEGER,student_id INTEGER,score INTEGER,total INTEGER,UNIQUE(quiz_id,student_id));
     CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,student_id INTEGER,requested TEXT,status TEXT DEFAULT 'Requested');
     ''')
+    columns = {row[1] for row in c.execute('PRAGMA table_info(users)')}
+    if 'supabase_user_id' not in columns:
+        c.execute('ALTER TABLE users ADD COLUMN supabase_user_id TEXT')
+    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_supabase_id ON users(supabase_user_id)')
 def E(x):return html.escape(str(x or ""),quote=True)
 def hashpw(password):
     salt=secrets.token_bytes(16)
@@ -168,7 +172,7 @@ def teacher(req:Request):
     body=f'''<p>Teacher workspace — separate from your local Streamlit Studio. Data does not synchronize automatically.</p>
     <article><h2>Invite a student</h2><p>Send a secure invitation. Students choose their own passwords.</p><form method="post" action="/student-invite">{token(req)}<label>Student display name<input name="display" maxlength="150" required></label><label>Student email<input name="email" type="email" maxlength="254" required></label><button>Invite Student</button></form></article>
     <article><h2>Assign lesson and meeting link</h2><form method="post" action="/lesson-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><label>Provider meeting link (HTTPS)<input name="meeting_url" type="url"></label><button>Assign lesson</button></form></article>
-    <article><h2>Assign quiz</h2><form method="post" action="/quiz-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><label>Questions JSON<textarea name="questions" rows="7">[{{"question":"Which organelle makes most ATP?","options":["Nucleus","Mitochondrion","Ribosome","Golgi"],"correct":1}}]</textarea></label><button>Assign quiz</button></form></article>
+    <article><h2>Assign quiz</h2><form method="post" action="/quiz-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><p><a href="/quiz-builder">Open visual quiz builder</a> (no JSON editing required)</p><label>Questions JSON<textarea name="questions" rows="7">[{{"question":"Which organelle makes most ATP?","options":["Nucleus","Mitochondrion","Ribosome","Golgi"],"correct":1}}]</textarea></label><button>Assign quiz</button></form></article>
     <article><h2>Results</h2><ul>{''.join(f'<li>{E(r["display"])} — {E(r["title"])}: {r["score"]}/{r["total"]}</li>' for r in results)}</ul></article>
     <article><h2>Bookings</h2><ul>{''.join(f'<li>{E(b["display"])}: {E(b["requested"])} — {E(b["status"])} <form method="post" action="/booking/{b["id"]}">{token(req)}<button name="decision" value="Approved">Approve</button> <button name="decision" value="Declined">Decline</button></form></li>' for b in bookings)}</ul></article>
     <form method="post" action="/logout"><button>Sign out</button></form>'''
@@ -292,6 +296,52 @@ def lesson_create(req:Request,student_id:int=Form(...),title:str=Form(...),meeti
         if not c.execute("SELECT id FROM users WHERE id=? AND role='student'",(student_id,)).fetchone():raise HTTPException(400)
         c.execute("INSERT INTO lessons(student_id,title,meeting_url) VALUES(?,?,?)",(student_id,title,meeting_url))
     return redirect("/teacher")
+@app.get("/quiz-builder")
+def quiz_builder(req: Request):
+    require(req, "teacher")
+    with conn() as c:
+        students = c.execute("SELECT id,display FROM users WHERE role='student'").fetchall()
+    options = "".join(f'<option value="{s["id"]}">{E(s["display"])}</option>' for s in students)
+    body = (
+        '<article><h2>Visual quiz builder</h2>'
+        '<p>Create multiple-choice questions without writing JSON. Each question has four answers.</p>'
+        f'<form method="post" action="/quiz-builder">{token(req)}'
+        f'<label>Student<select name="student_id" required>{options}</select></label>'
+        '<label>Quiz title<input name="title" maxlength="200" required></label>'
+        '<div id="questions"></div>'
+        '<button type="button" id="add-question">Add question</button>'
+        '<button type="submit">Save quiz</button></form></article>'
+        '<script src="/static/quiz_builder.js" defer></script>'
+    )
+    return page("Visual quiz builder", body)
+
+@app.post("/quiz-builder")
+def quiz_builder_save(req: Request, student_id: int = Form(...), title: str = Form(...),
+                      question: list[str] = Form(...), option_a: list[str] = Form(...),
+                      option_b: list[str] = Form(...), option_c: list[str] = Form(...),
+                      option_d: list[str] = Form(...), correct: list[int] = Form(...),
+                      csrf: str = Form(...)):
+    require(req, "teacher")
+    verifycsrf(req, csrf)
+    lengths = [len(v) for v in (question, option_a, option_b, option_c, option_d, correct)]
+    if len(set(lengths)) != 1 or not 1 <= lengths[0] <= 30:
+        raise HTTPException(400, "Quiz must have 1 to 30 complete questions")
+    items = []
+    for i in range(lengths[0]):
+        opts = [option_a[i].strip(), option_b[i].strip(), option_c[i].strip(), option_d[i].strip()]
+        prompt = question[i].strip()
+        if not prompt or len(prompt) > 1000 or any(not o or len(o) > 500 for o in opts) or correct[i] not in range(4):
+            raise HTTPException(400, "Invalid question or answer")
+        items.append({"question": prompt, "options": opts, "correct": correct[i]})
+    if not title.strip() or len(title) > 200:
+        raise HTTPException(400, "Invalid quiz title")
+    with conn() as c:
+        if not c.execute("SELECT id FROM users WHERE id=? AND role='student'", (student_id,)).fetchone():
+            raise HTTPException(400, "Invalid student")
+        c.execute("INSERT INTO quizzes(student_id,title,questions) VALUES(?,?,?)",
+                  (student_id, title.strip(), json.dumps(items)))
+    return redirect("/teacher")
+
 @app.post("/quiz-create")
 def quiz_create(req:Request,student_id:int=Form(...),title:str=Form(...),questions:str=Form(...),csrf:str=Form(...)):
     require(req,"teacher");verifycsrf(req,csrf)
