@@ -64,15 +64,15 @@ def page(title,body):
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>' + E(title) + ' · KRISI Biology Studio</title>'
-        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css"></head><body>'
+        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css?v=3-simple"></head><body>'
         '<div class="studio-shell"><header class="studio-header">'
         '<a class="studio-brand" href="/"><span class="brand-mark">✦</span>'
         '<span><small>KRISI / STUDIO COLLECTION</small><strong>Biology Studio</strong></span></a>'
-        '<span class="studio-edition">DARK ACADEMIA · v1.1</span>'
+        '<span class="studio-edition">DARK ACADEMIA · SIMPLE UI</span>'
         '</header><main class="studio-main">'
-        '<div class="studio-hero"><span class="eyebrow">LEARNING & DISCOVERY</span>'
+        '<div class="studio-hero"><span class="eyebrow">BIOLOGY STUDIO · SIMPLE NAVIGATION</span>'
         '<h1>' + E(title) + '</h1>'
-        '<p>A thoughtful space for biology lessons, assessments and learning.</p>'
+        '<p>Choose what you need. Everything else is one click away.</p>'
         '</div><div class="studio-content">' + body + '</div></main>'
         '<footer>KRISI.SITE &nbsp; · &nbsp; LOCAL STUDENT PORTAL PROTOTYPE</footer>'
         '</div></body></html>'
@@ -186,37 +186,47 @@ def logout(req:Request):
     req.session.clear()
     return redirect("/login")
 def hybrid_navigation(role):
-    """Compact section navigation with accessible, expandable tool groups."""
+    """Simple primary navigation; extra tools stay in one expandable menu."""
     teacher = role == "teacher"
-    groups = (
-        [("People", [("Invite a student", "#section-1"), ("Student progress", "/progress"), ("Certificates", "/certificates")]),
-         ("Teaching", [("Lessons", "#section-2"), ("Quiz Builder", "/quiz-builder"), ("Materials", "/materials"), ("Homework", "/homework"), ("Biology Activities", "/activities")]),
-         ("Schedule", [("Calendar", "/calendar"), ("Bookings", "#section-5"), ("Live Classroom", "/classroom"), ("Whiteboard", "/whiteboard")]),
-         ("Reports & tools", [("Results", "#section-4"), ("Email Notifications", "/notifications")])]
-        if teacher else
-        [("Learning", [("My lessons", "#section-1"), ("My quizzes", "#section-2"), ("Materials", "/my-materials"), ("Homework", "/my-homework"), ("Biology Activities", "/my-activities")]),
-         ("Schedule", [("Book a lesson", "#section-3"), ("Calendar", "/my-calendar"), ("Classroom", "/my-classroom"), ("Whiteboard", "/my-whiteboard")]),
-         ("Achievements", [("My progress", "/my-progress"), ("Certificates", "/my-certificates")])]
-    )
-    menu = '<a class="hybrid-home" href="' + ('/teacher' if teacher else '/student') + '">⌂ Dashboard</a>'
-    for index, (label, links) in enumerate(groups):
-        menu += '<details class="hybrid-group"' + (' open' if index == 0 else '') + '><summary>' + E(label) + '</summary>'
-        menu += ''.join('<a href="' + E(url) + '">' + E(text) + '</a>' for text, url in links)
-        menu += '</details>'
-    return '<nav class="dashboard-nav hybrid-nav" aria-label="' + ('Teacher' if teacher else 'Student') + ' navigation"><small>' + ('TEACHER' if teacher else 'STUDENT') + ' WORKSPACE</small>' + menu + '</nav>'
+    home = "/teacher" if teacher else "/student"
+    primary = ([("Home", home), ("Teaching", "/quiz-builder"), ("Schedule", "/calendar"),
+                ("Students & Progress", "/progress")] if teacher else
+               [("Home", home), ("My Learning", "/my-activities"), ("My Schedule", "/my-calendar"),
+                ("My Progress", "/my-progress")])
+    extra = ([("Invite a student", "#section-1"), ("Lessons", "#section-2"),
+              ("Materials", "/materials"), ("Homework", "/homework"), ("Biology Activities", "/activities"),
+              ("Classroom", "/classroom"), ("Whiteboard", "/whiteboard"),
+              ("Certificates", "/certificates"), ("Notifications", "/notifications"),
+              ("Bookings", "#section-5")] if teacher else
+             [("Lessons", "#section-1"), ("Quizzes", "#section-2"),
+              ("Materials", "/my-materials"), ("Homework", "/my-homework"),
+              ("Classroom", "/my-classroom"), ("Whiteboard", "/my-whiteboard"),
+              ("Certificates", "/my-certificates"), ("Book a lesson", "#section-3")])
+    menu = ''.join('<a class="simple-nav-link" href="' + E(url) + '">' + E(label) + '</a>'
+                   for label, url in primary)
+    menu += '<details class="hybrid-group"><summary>More tools</summary>'
+    menu += ''.join('<a href="' + E(url) + '">' + E(label) + '</a>' for label, url in extra)
+    menu += '</details>'
+    return ('<nav class="dashboard-nav hybrid-nav simple-nav" aria-label="Main navigation">'
+            '<small>BIOLOGY STUDIO</small>' + menu + '</nav>')
 
 def dashboard_shortcuts(role):
     links = (
-        [("Students", "#section-1", "Invitations & profiles"), ("Teaching", "/quiz-builder", "Lessons & assessments"),
-         ("Schedule", "/calendar", "Bookings & classes"), ("Progress", "/progress", "Results & achievements")]
+        [("Teaching", "/quiz-builder", "Create a quiz"),
+         ("Schedule", "/calendar", "Plan a lesson"),
+         ("Students", "/progress", "See student progress"),
+         ("Materials", "/materials", "Share learning resources")]
         if role == "teacher" else
-        [("My Lessons", "#section-1", "Your assigned lessons"), ("My Activities", "/my-activities", "Exercises & quizzes"),
-         ("My Schedule", "/my-calendar", "Upcoming sessions"), ("My Progress", "/my-progress", "Scores & certificates")]
+        [("My Learning", "/my-activities", "Start an activity"),
+         ("My Schedule", "/my-calendar", "See upcoming lessons"),
+         ("My Progress", "/my-progress", "Check results"),
+         ("My Materials", "/my-materials", "Open resources")]
     )
-    return '<section class="hybrid-shortcuts" aria-label="Quick navigation">' + ''.join(
+    return '<section class="hybrid-shortcuts simple-shortcuts" aria-label="Choose what to do">' + ''.join(
         '<a class="hybrid-shortcut" href="' + E(url) + '"><strong>' + E(label) + '</strong><span>' + E(detail) + '</span></a>'
         for label, url, detail in links
     ) + '</section>'
+
 
 @app.get("/teacher")
 def teacher(req:Request):
@@ -234,7 +244,7 @@ def teacher(req:Request):
     <article><h2>Bookings</h2><ul>{''.join(f'<li>{E(b["display"])}: {E(b["requested"])} — {E(b["status"])} <form method="post" action="/booking/{b["id"]}">{token(req)}<button name="decision" value="Approved">Approve</button> <button name="decision" value="Declined">Decline</button></form></li>' for b in bookings)}</ul></article>
     <form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout">' + hybrid_navigation("teacher")
+        '<div class="dashboard-layout simple-dashboard">' + hybrid_navigation("teacher")
         + '<div class="dashboard-main">'
         + '<p class="dashboard-intro">Welcome to your teaching workspace. Choose a section to get started.</p>'
         + dashboard_shortcuts("teacher")
@@ -242,8 +252,8 @@ def teacher(req:Request):
         + f'<div class="stat-card"><strong>{len(students)}</strong><span>Students</span></div>'
         + f'<div class="stat-card"><strong>{len(results)}</strong><span>Quiz results</span></div>'
         + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        + '</div><h2 class="hybrid-section-heading">Quick actions & overview</h2><div class="dashboard-panels">'
-        + body + '</div></div></div>'
+        + '</div><details class="simple-actions"><summary>Open advanced teacher tools and forms</summary><div class="dashboard-panels">'
+        + body + '</div></details></div></div>'
     )
     for index in range(1, 6):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
@@ -424,7 +434,7 @@ def student(req:Request):
     <article><h2>Request a lesson</h2><form method="post" action="/booking-create">{token(req)}<label>Preferred date and time (UTC)<input type="datetime-local" name="requested" required></label><button>Request booking</button></form>
     <ul>{''.join(f'<li>{E(b["requested"])} — {E(b["status"])}</li>' for b in bookings)}</ul></article><form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout">' + hybrid_navigation("student")
+        '<div class="dashboard-layout simple-dashboard">' + hybrid_navigation("student")
         + '<div class="dashboard-main">'
         + '<p class="dashboard-intro">Your learning space. Pick a section to continue.</p>'
         + dashboard_shortcuts("student")
@@ -432,7 +442,7 @@ def student(req:Request):
         + f'<div class="stat-card"><strong>{len(lessons)}</strong><span>Lessons</span></div>'
         + f'<div class="stat-card"><strong>{len(quizzes)}</strong><span>Quizzes</span></div>'
         + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        + '</div><h2 class="hybrid-section-heading">Your learning overview</h2><div class="dashboard-panels">'
+        + '</div><details class="simple-actions"><summary>Open my lessons, quizzes and booking form</summary><div class="dashboard-panels">'
         + body + '</div></div></div>'
     )
     for index in range(1, 4):
