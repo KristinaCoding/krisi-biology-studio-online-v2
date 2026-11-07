@@ -44,3 +44,21 @@ body{background:radial-gradient(ellipse at 85% 0%,#39242e,#120e13 65%)!important
 @media(max-width:1100px){.hybrid-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:850px){.dashboard-layout{grid-template-columns:1fr}.hybrid-nav{position:static;max-height:none;display:block}.hybrid-group{display:inline-block;vertical-align:top;width:calc(50% - 8px);margin:3px;box-sizing:border-box}.hybrid-nav .hybrid-home{margin-bottom:10px}}
 @media(max-width:520px){.hybrid-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.hybrid-shortcut{min-height:90px;padding:12px}.hybrid-shortcut strong{font-size:16px}.hybrid-group{width:100%;margin:2px 0}.hybrid-section-heading{font-size:21px}}
+
+/* Simple dashboard v3: hide complexity until explicitly requested */
+.simple-dashboard{grid-template-columns:205px minmax(0,1fr);gap:30px}
+.simple-nav{max-height:none;overflow:visible;gap:9px}
+.simple-nav .simple-nav-link{display:block;padding:15px 14px;border:1px solid transparent;border-radius:11px;font-weight:600;font-size:15px}
+.simple-nav .simple-nav-link:first-of-type{background:#47303a;border-color:#7d5961;color:#f2d39c}
+.simple-nav .hybrid-group{margin-top:12px}
+.simple-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:24px}
+.simple-shortcuts .hybrid-shortcut{min-height:150px;padding:25px;border:1px solid #87636b;border-radius:18px}
+.simple-shortcuts .hybrid-shortcut strong{font-size:26px}
+.simple-shortcuts .hybrid-shortcut span{font-size:14px}
+.simple-actions{margin-top:24px;border:1px solid #674951;background:#231920;border-radius:16px;padding:18px}
+.simple-actions>summary{cursor:pointer;color:#e6c99c;font-weight:700;font-size:16px;padding:8px;list-style:revert}
+.simple-actions[open]>summary{margin-bottom:18px}
+.simple-actions .dashboard-panels{display:grid}
+.simple-dashboard .dashboard-stats{margin-top:8px}
+@media(max-width:850px){.simple-dashboard{grid-template-columns:1fr}.simple-nav{display:flex;flex-direction:row;flex-wrap:wrap}.simple-nav small{width:100%}.simple-nav .simple-nav-link{flex:1 1 135px;text-align:center}.simple-nav .hybrid-group{width:100%}}
+@media(max-width:550px){.simple-shortcuts{grid-template-columns:1fr;gap:12px}.simple-shortcuts .hybrid-shortcut{min-height:112px;padding:19px}.simple-shortcuts .hybrid-shortcut strong{font-size:22px}.simple-actions{padding:12px}}
