@@ -114,7 +114,7 @@ def register(app, require, page, token, verifycsrf, E):
         except (ValueError,TypeError): raise HTTPException(401)
         role=get_user_role(uid)
         if role not in ("teacher","student"): raise HTTPException(403)
-        viewer={"id":uid,"role":role}
+        viewer=require(req,role)
         a=activity_for(viewer,activity_id)
         questions=a["questions"]
         if isinstance(questions,str):questions=json.loads(questions)
