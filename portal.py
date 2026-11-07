@@ -16,6 +16,11 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from biology_activities import register as register_biology_activities
 from shared_whiteboard import register as register_shared_whiteboard
+from homework import register as register_homework
+from certificates import register as register_certificates
+from student_progress import register as register_student_progress
+from calendar_schedule import register as register_calendar
+from live_classroom import register as register_live_classroom
 
 SECRET=os.environ.get("PORTAL_SECRET","")
 if len(SECRET)<32: raise RuntimeError("Set PORTAL_SECRET to a random 32+ character value")
@@ -305,6 +310,15 @@ def teacher(req: Request):
     )
     for index in range(1, 7):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
+    if os.environ.get("BIOLOGY_V3_ENABLED") == "1":
+        body += ('<article><h2>Teaching tools · v3</h2><nav>'
+                 '<a href="/homework">Homework</a> · '
+                 '<a href="/certificates">Certificates</a> · '
+                 '<a href="/progress">Student progress</a> · '
+                 '<a href="/calendar">Teaching calendar</a> · '
+                 '<a href="/classroom">Live classroom</a> · '
+                 '<a href="/activities">Biology activities</a>'
+                 '</nav></article>')
     return page("Teacher dashboard", body)
 @app.post("/student-create")
 def student_create(req:Request,display:str=Form(...),email:str=Form(...),password:str=Form(...),csrf:str=Form(...)):
@@ -853,6 +867,15 @@ def student(req: Request):
             1
         )
 
+    if os.environ.get("BIOLOGY_V3_ENABLED") == "1":
+        body += ('<article><h2>Learning tools · v3</h2><nav>'
+                 '<a href="/my-homework">My homework</a> · '
+                 '<a href="/my-certificates">My certificates</a> · '
+                 '<a href="/my-progress">My progress</a> · '
+                 '<a href="/my-calendar">My calendar</a> · '
+                 '<a href="/my-classroom">My classroom</a> · '
+                 '<a href="/my-activities">Biology activities</a>'
+                 '</nav></article>')
     return page("Student portal", body)
 @app.post("/booking-create")
 def booking_create(
@@ -1131,6 +1154,15 @@ async def quiz_submit(req: Request, qid: str):
         f"<article>Score: {score}/{len(questions)}</article>"
         "<a href='/student'>Back</a>"
     )
+
+# v3 modules are gated until database migrations and staging checks pass.
+# The existing PostgreSQL portal stays usable without the new tables.
+if os.environ.get("BIOLOGY_V3_ENABLED") == "1":
+    register_homework(app, require, page, token, verifycsrf, E)
+    register_certificates(app, require, page, token, verifycsrf, E)
+    register_student_progress(app, require, page, E)
+    register_calendar(app, require, page, token, verifycsrf, E)
+    register_live_classroom(app, require, page, token, verifycsrf, E)
 
 register_biology_activities(app, require, page, token, verifycsrf, E)
 register_shared_whiteboard(app, None, require, page, token, verifycsrf, E)
