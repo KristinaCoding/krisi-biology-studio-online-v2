@@ -27,7 +27,11 @@ def storage_config():
 
 def storage_request(method,bucket,path,data=None,mime=None):
     base,key,_=storage_config()
-    url=f"{base}/storage/v1/object/{quote(bucket,safe='')}/{quote(path,safe='/')}"
+    endpoint="authenticated" if method=="GET" else ""
+    prefix=f"{base}/storage/v1/object"
+    if endpoint:
+        prefix+=f"/{endpoint}"
+    url=f"{prefix}/{quote(bucket,safe='')}/{quote(path,safe='/')}"
     headers={"apikey":key,"Authorization":"Bearer "+key}
     if mime:
         headers["Content-Type"]=mime
