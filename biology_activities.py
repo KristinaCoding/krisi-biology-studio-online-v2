@@ -1,171 +1,159 @@
-"""Interactive biology multiple-choice activities with saved attempts."""
+"""PostgreSQL-backed biology activities; uses existing Supabase UUID identities."""
 import json
+from uuid import UUID
 from fastapi import Request, Form, HTTPException
 from fastapi.responses import RedirectResponse
+from psycopg.types.json import Jsonb
+from database import get_connection
 
-def register(app, conn, require, page, token, verifycsrf, E):
-    with conn() as c:
-        c.execute("""CREATE TABLE IF NOT EXISTS biology_activities (
-            id INTEGER PRIMARY KEY, student_id INTEGER NOT NULL REFERENCES users(id),
-            title TEXT NOT NULL, topic TEXT NOT NULL, questions TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-        c.execute("""CREATE TABLE IF NOT EXISTS biology_activity_results (
-            id INTEGER PRIMARY KEY, activity_id INTEGER NOT NULL UNIQUE REFERENCES biology_activities(id),
-            student_id INTEGER NOT NULL REFERENCES users(id), answers TEXT NOT NULL,
-            score INTEGER NOT NULL, total INTEGER NOT NULL,
-            completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-
-    def get_activity(activity_id):
-        with conn() as c:
-            activity = c.execute("SELECT * FROM biology_activities WHERE id=?", (activity_id,)).fetchone()
-        if not activity:
+def register(app, require, page, token, verifycsrf, E):
+    def activity_for(viewer, activity_id):
+        try:
+            aid = int(activity_id)
+        except (ValueError, TypeError):
             raise HTTPException(404, "Activity not found")
-        return activity
-
-    def authorize(req, activity):
-        uid = req.session.get("uid")
-        if not isinstance(uid, int):
-            raise HTTPException(401, "Sign in required")
-        with conn() as c:
-            viewer = c.execute("SELECT id,role FROM users WHERE id=?", (uid,)).fetchone()
-        if not viewer:
-            raise HTTPException(401)
-        if viewer["role"] != "teacher" and not (viewer["role"] == "student" and viewer["id"] == activity["student_id"]):
-            raise HTTPException(403)
-        return viewer
+        with get_connection() as db, db.cursor() as cur:
+            cur.execute("""
+                SELECT a.id,a.teacher_id,a.student_id,a.title,a.topic,a.questions,
+                       r.score,r.total,r.answers
+                FROM public.biology_activities a
+                JOIN public.teacher_students ts
+                  ON ts.teacher_id=a.teacher_id AND ts.student_id=a.student_id
+                LEFT JOIN public.biology_activity_results r ON r.activity_id=a.id
+                WHERE a.id=%s AND
+                  (a.teacher_id=%s AND %s='teacher' OR
+                   a.student_id=%s AND %s='student')
+            """, (aid,viewer["id"],viewer["role"],viewer["id"],viewer["role"]))
+            row=cur.fetchone()
+        if row is None: raise HTTPException(404,"Activity not found")
+        return dict(zip(("id","teacher_id","student_id","title","topic","questions","score","total","answers"),row))
 
     @app.get("/activities")
     def teacher_activities(req: Request):
-        require(req, "teacher")
-        with conn() as c:
-            students = c.execute("SELECT id,display FROM users WHERE role='student' ORDER BY display").fetchall()
-            activities = c.execute("""SELECT a.*, u.display, r.score, r.total
-                FROM biology_activities a JOIN users u ON u.id=a.student_id
-                LEFT JOIN biology_activity_results r ON r.activity_id=a.id
-                ORDER BY a.id DESC""").fetchall()
-        options = ''.join(f'<option value="{s["id"]}">{E(s["display"])}</option>' for s in students)
-        listing = ''.join(f'<li><a href="/activities/{a["id"]}">{E(a["title"])}</a> — '
-                          f'{E(a["display"])} · {E(a["topic"])} · '
-                          f'{"Not completed" if a["score"] is None else str(a["score"]) + "/" + str(a["total"])}'
-                          '</li>' for a in activities)
-        body = (
-            '<p><a href="/teacher">← Teacher dashboard</a></p>'
-            '<article><h2>Create a biology activity</h2>'
-            '<p>Add 1–10 multiple-choice questions. Separate the question and its four options using the fields below.</p>'
-            f'<form method="post" action="/activities">{token(req)}'
-            f'<label>Student<select name="student_id" required>{options}</select></label>'
-            '<label>Activity title<input name="title" maxlength="150" required></label>'
-            '<label>Topic<input name="topic" maxlength="100" required placeholder="e.g. Cell biology"></label>'
-            '<label>Questions (JSON array)<textarea name="questions" rows="12" required '
-            'placeholder=\'[{"question":"Which organelle produces ATP?","options":["Nucleus","Mitochondrion","Ribosome","Golgi apparatus"],"answer":1}]\'></textarea></label>'
-            '<p>Each question needs a question, exactly four options and answer index 0–3.</p>'
-            '<button type="submit">Create activity</button></form></article>'
-            f'<article><h2>Assigned activities</h2><ul>{listing or "<li>No activities yet.</li>"}</ul></article>'
-        )
-        return page("Interactive Biology Activities", body)
+        teacher=require(req,"teacher")
+        with get_connection() as db, db.cursor() as cur:
+            cur.execute("""
+                SELECT s.id,s.display_name FROM public.student_profiles s
+                JOIN public.teacher_students ts ON ts.student_id=s.id
+                WHERE ts.teacher_id=%s ORDER BY s.display_name
+            """,(teacher["id"],))
+            students=cur.fetchall()
+            cur.execute("""
+                SELECT a.id,a.title,a.topic,s.display_name,r.score,r.total
+                FROM public.biology_activities a
+                JOIN public.teacher_students ts ON ts.teacher_id=a.teacher_id AND ts.student_id=a.student_id
+                JOIN public.student_profiles s ON s.id=a.student_id
+                LEFT JOIN public.biology_activity_results r ON r.activity_id=a.id
+                WHERE a.teacher_id=%s ORDER BY a.id DESC
+            """,(teacher["id"],))
+            activities=cur.fetchall()
+        options="".join(f'<option value="{sid}">{E(name)}</option>' for sid,name in students)
+        rows="".join(f'<li><a href="/activities/{aid}">{E(title)}</a> — {E(name)} · {E(topic)} · {score if score is not None else "Pending"}{"/"+str(total) if score is not None else ""}</li>' for aid,title,topic,name,score,total in activities)
+        body=(f'<p><a href="/teacher">← Dashboard</a></p><article><h2>Create biology activity</h2>'
+              f'<form method="post">{token(req)}<label>Student<select name="student_id" required>{options}</select></label>'
+              '<label>Title<input name="title" maxlength="150" required></label>'
+              '<label>Topic<input name="topic" maxlength="100" required></label>'
+              '<label>Questions JSON<textarea name="questions" maxlength="20000" rows="10" required></textarea></label>'
+              '<p>JSON array of 1–10 questions with question, four options, and answer index (0–3).</p>'
+              '<button>Create activity</button></form></article>'
+              f'<article><h2>Assigned activities</h2><ul>{rows or "<li>No activities</li>"}</ul></article>')
+        return page("Biology activities",body)
 
     @app.post("/activities")
-    def create_activity(req: Request, student_id: int = Form(...), title: str = Form(...),
-                        topic: str = Form(...), questions: str = Form(...), csrf: str = Form(...)):
-        require(req, "teacher")
-        verifycsrf(req, csrf)
-        title, topic = title.strip(), topic.strip()
-        if not title or len(title) > 150 or not topic or len(topic) > 100 or len(questions) > 20000:
-            raise HTTPException(400, "Invalid activity details")
+    def create(req:Request,student_id:str=Form(...),title:str=Form(...),topic:str=Form(...),questions:str=Form(...),csrf:str=Form(...)):
+        teacher=require(req,"teacher");verifycsrf(req,csrf)
+        title=title.strip();topic=topic.strip()
+        if not 1<=len(title)<=150 or not 1<=len(topic)<=100 or len(questions)>20000:
+            raise HTTPException(400,"Invalid activity")
         try:
-            data = json.loads(questions)
-        except (ValueError, TypeError):
-            raise HTTPException(400, "Questions must be valid JSON")
-        if not isinstance(data, list) or not 1 <= len(data) <= 10:
-            raise HTTPException(400, "Provide 1–10 questions")
+            student=str(UUID(student_id));data=json.loads(questions)
+        except (ValueError,TypeError):
+            raise HTTPException(400,"Invalid student or JSON")
+        if not isinstance(data,list) or not 1<=len(data)<=10:
+            raise HTTPException(400,"Provide 1–10 questions")
         for q in data:
-            if (not isinstance(q, dict) or set(q) != {"question", "options", "answer"}
-                or not isinstance(q["question"], str) or not 1 <= len(q["question"].strip()) <= 500
-                or not isinstance(q["options"], list) or len(q["options"]) != 4
-                or any(not isinstance(opt, str) or not 1 <= len(opt.strip()) <= 250 for opt in q["options"])
+            if (not isinstance(q,dict) or set(q)!={"question","options","answer"}
+                or not isinstance(q["question"],str) or not 1<=len(q["question"].strip())<=500
+                or not isinstance(q["options"],list) or len(q["options"])!=4
+                or any(not isinstance(o,str) or not 1<=len(o.strip())<=250 for o in q["options"])
                 or type(q["answer"]) is not int or q["answer"] not in range(4)):
-                raise HTTPException(400, "Each question needs four options and an answer index 0–3")
-        with conn() as c:
-            if not c.execute("SELECT 1 FROM users WHERE id=? AND role='student'", (student_id,)).fetchone():
-                raise HTTPException(400, "Choose a valid student")
-            cur = c.execute("""INSERT INTO biology_activities(student_id,title,topic,questions)
-                VALUES(?,?,?,?)""", (student_id, title, topic, json.dumps(data)))
-            activity_id = cur.lastrowid
-        return RedirectResponse(f"/activities/{activity_id}", status_code=303)
+                raise HTTPException(400,"Invalid question")
+        with get_connection() as db,db.cursor() as cur:
+            cur.execute("""
+                INSERT INTO public.biology_activities(teacher_id,student_id,title,topic,questions)
+                SELECT ts.teacher_id,ts.student_id,%s,%s,%s
+                FROM public.teacher_students ts
+                WHERE ts.teacher_id=%s AND ts.student_id=%s
+                RETURNING id
+            """,(title,topic,Jsonb(data),teacher["id"],student))
+            row=cur.fetchone()
+            if row is None: raise HTTPException(403,"Student is not assigned to this teacher")
+        return RedirectResponse(f"/activities/{row[0]}",status_code=303)
 
     @app.get("/my-activities")
-    def student_activities(req: Request):
-        u = require(req, "student")
-        with conn() as c:
-            rows = c.execute("""SELECT a.*, r.score, r.total FROM biology_activities a
-                LEFT JOIN biology_activity_results r ON r.activity_id=a.id
-                WHERE a.student_id=? ORDER BY a.id DESC""", (u["id"],)).fetchall()
-        links = ''.join(f'<li><a href="/activities/{a["id"]}">{E(a["title"])}</a> — '
-                        f'{E(a["topic"])} · '
-                        f'{"Ready to complete" if a["score"] is None else "Completed: " + str(a["score"]) + "/" + str(a["total"])}'
-                        '</li>' for a in rows)
-        return page("My Biology Activities", '<p><a href="/student">← Student dashboard</a></p>'
-                    f'<article><h2>Interactive exercises</h2><ul>{links or "<li>No activities assigned.</li>"}</ul></article>')
+    def mine(req:Request):
+        student=require(req,"student")
+        with get_connection() as db,db.cursor() as cur:
+            cur.execute("""
+                SELECT a.id,a.title,a.topic,r.score,r.total
+                FROM public.biology_activities a
+                JOIN public.teacher_students ts ON ts.teacher_id=a.teacher_id AND ts.student_id=a.student_id
+                LEFT JOIN public.biology_activity_results r ON r.activity_id=a.id
+                WHERE a.student_id=%s ORDER BY a.id DESC
+            """,(student["id"],))
+            rows=cur.fetchall()
+        listing="".join(f'<li><a href="/activities/{aid}">{E(title)}</a> — {E(topic)} · {score if score is not None else "Ready"}{"/"+str(total) if score is not None else ""}</li>' for aid,title,topic,score,total in rows)
+        return page("My activities",f'<p><a href="/student">← Dashboard</a></p><article><ul>{listing or "<li>No activities</li>"}</ul></article>')
 
     @app.get("/activities/{activity_id}")
-    def activity_detail(req: Request, activity_id: int):
-        activity = get_activity(activity_id)
-        viewer = authorize(req, activity)
-        questions = json.loads(activity["questions"])
-        with conn() as c:
-            result = c.execute("SELECT * FROM biology_activity_results WHERE activity_id=?", (activity_id,)).fetchone()
-        back = "/activities" if viewer["role"] == "teacher" else "/my-activities"
-        if result:
-            answers = json.loads(result["answers"])
-            lines = ''.join(
-                f'<li>{E(q["question"])} — '
-                f'Answer: {E(q["options"][q["answer"]])}; '
-                f'Selected: {E(q["options"][answers[i]])}</li>'
-                for i, q in enumerate(questions)
-            )
-            body = (f'<p><a href="{back}">← Activities</a></p>'
-                    f'<article><h2>{E(activity["title"])}</h2><p>{E(activity["topic"])}</p>'
-                    f'<h3>Result: {result["score"]}/{result["total"]}</h3><ol>{lines}</ol></article>')
-        elif viewer["role"] == "teacher":
-            body = (f'<p><a href="{back}">← Activities</a></p>'
-                    f'<article><h2>{E(activity["title"])}</h2>'
-                    '<p>Assigned to the student. Awaiting their first attempt.</p></article>')
+    def detail(req:Request,activity_id:int):
+        # Use the portal's verified identity; never trust a role supplied by the browser.
+        from auth_service import get_user_role
+        raw=req.session.get("supabase_user_id")
+        try: uid=str(UUID(str(raw)))
+        except (ValueError,TypeError): raise HTTPException(401)
+        role=get_user_role(uid)
+        if role not in ("teacher","student"): raise HTTPException(403)
+        viewer={"id":uid,"role":role}
+        a=activity_for(viewer,activity_id)
+        questions=a["questions"]
+        if isinstance(questions,str):questions=json.loads(questions)
+        back="/activities" if role=="teacher" else "/my-activities"
+        if a["score"] is not None:
+            body=f'<article><h2>{E(a["title"])}</h2><p>Score: {a["score"]}/{a["total"]}</p></article>'
+        elif role=="teacher":
+            body=f'<article><h2>{E(a["title"])}</h2><p>Awaiting student submission.</p></article>'
         else:
-            blocks = []
-            for i, q in enumerate(questions):
-                opts = ''.join(
-                    f'<label style="display:block"><input type="radio" name="q{i}" value="{j}" required> {E(opt)}</label>'
-                    for j, opt in enumerate(q["options"])
-                )
-                blocks.append(f'<fieldset><legend>{i+1}. {E(q["question"])}</legend>{opts}</fieldset>')
-            body = (f'<p><a href="{back}">← Activities</a></p>'
-                    f'<article><h2>{E(activity["title"])}</h2><p>{E(activity["topic"])}</p>'
-                    f'<form method="post" action="/activities/{activity_id}/submit">{token(req)}'
-                    + ''.join(blocks) + '<button type="submit">Submit answers</button></form></article>')
-        return page("Biology Activity", body)
+            fields=""
+            for i,q in enumerate(questions):
+                opts="".join(f'<label><input type="radio" name="q{i}" value="{j}" required> {E(o)}</label>' for j,o in enumerate(q["options"]))
+                fields+=f'<fieldset><legend>{i+1}. {E(q["question"])}</legend>{opts}</fieldset>'
+            body=f'<article><h2>{E(a["title"])}</h2><form method="post" action="/activities/{activity_id}/submit">{token(req)}{fields}<button>Submit</button></form></article>'
+        return page("Biology activity",f'<p><a href="{back}">← Activities</a></p>'+body)
 
     @app.post("/activities/{activity_id}/submit")
-    async def submit_activity(req: Request, activity_id: int):
-        activity = get_activity(activity_id)
-        viewer = authorize(req, activity)
-        if viewer["role"] != "student":
-            raise HTTPException(403)
-        form = await req.form()
-        verifycsrf(req, str(form.get("csrf", "")))
-        questions = json.loads(activity["questions"])
-        answers = []
+    async def submit(req:Request,activity_id:int):
+        student=require(req,"student")
+        a=activity_for(student,activity_id)
+        if a["score"] is not None:raise HTTPException(409,"Already submitted")
+        form=await req.form();verifycsrf(req,str(form.get("csrf","")))
+        questions=a["questions"]
+        if isinstance(questions,str):questions=json.loads(questions)
+        answers=[]
         for i in range(len(questions)):
-            value = form.get(f"q{i}")
-            if not isinstance(value, str) or value not in ("0", "1", "2", "3"):
-                raise HTTPException(400, "Answer all questions")
-            answers.append(int(value))
-        score = sum(answer == q["answer"] for answer, q in zip(answers, questions))
-        with conn() as c:
-            try:
-                c.execute("""INSERT INTO biology_activity_results(activity_id,student_id,answers,score,total)
-                    VALUES(?,?,?,?,?)""", (activity_id, viewer["id"], json.dumps(answers), score, len(questions)))
-            except __import__("sqlite3").IntegrityError:
-                raise HTTPException(409, "This activity has already been completed")
-        return RedirectResponse(f"/activities/{activity_id}", status_code=303)
+            v=form.get(f"q{i}")
+            if not isinstance(v,str) or v not in ("0","1","2","3"):
+                raise HTTPException(400,"Answer all questions")
+            answers.append(int(v))
+        score=sum(answer==q["answer"] for answer,q in zip(answers,questions))
+        with get_connection() as db,db.cursor() as cur:
+            cur.execute("""
+                INSERT INTO public.biology_activity_results(activity_id,student_id,answers,score,total)
+                SELECT a.id,a.student_id,%s,%s,%s
+                FROM public.biology_activities a
+                JOIN public.teacher_students ts ON ts.teacher_id=a.teacher_id AND ts.student_id=a.student_id
+                WHERE a.id=%s AND a.student_id=%s
+                ON CONFLICT(activity_id) DO NOTHING RETURNING id
+            """,(Jsonb(answers),score,len(questions),activity_id,student["id"]))
+            if cur.fetchone() is None:raise HTTPException(409,"Already submitted or not assigned")
+        return RedirectResponse(f"/activities/{activity_id}",status_code=303)
