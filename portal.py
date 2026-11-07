@@ -15,6 +15,7 @@ from auth_service import authenticate_portal_user
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from biology_activities import register as register_biology_activities
+from shared_whiteboard import register as register_shared_whiteboard
 
 SECRET=os.environ.get("PORTAL_SECRET","")
 if len(SECRET)<32: raise RuntimeError("Set PORTAL_SECRET to a random 32+ character value")
@@ -1132,6 +1133,7 @@ async def quiz_submit(req: Request, qid: str):
     )
 
 register_biology_activities(app, require, page, token, verifycsrf, E)
+register_shared_whiteboard(app, None, require, page, token, verifycsrf, E)
 
 app.mount(
     "/static",
