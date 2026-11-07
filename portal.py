@@ -21,6 +21,8 @@ from certificates import register as register_certificates
 from student_progress import register as register_student_progress
 from calendar_schedule import register as register_calendar
 from live_classroom import register as register_live_classroom
+from materials_library import register as register_materials_library
+from email_notifications import register as register_email_notifications
 
 SECRET=os.environ.get("PORTAL_SECRET","")
 if len(SECRET)<32: raise RuntimeError("Set PORTAL_SECRET to a random 32+ character value")
@@ -317,6 +319,8 @@ def teacher(req: Request):
                  '<a href="/progress">Student progress</a> · '
                  '<a href="/calendar">Teaching calendar</a> · '
                  '<a href="/classroom">Live classroom</a> · '
+                 '<a href="/materials">Materials library</a> · '
+                 '<a href="/notifications">Email notifications</a> · '
                  '<a href="/activities">Biology activities</a>'
                  '</nav></article>')
     return page("Teacher dashboard", body)
@@ -874,6 +878,7 @@ def student(req: Request):
                  '<a href="/my-progress">My progress</a> · '
                  '<a href="/my-calendar">My calendar</a> · '
                  '<a href="/my-classroom">My classroom</a> · '
+                 '<a href="/my-materials">My materials</a> · '
                  '<a href="/my-activities">Biology activities</a>'
                  '</nav></article>')
     return page("Student portal", body)
@@ -1163,6 +1168,8 @@ if os.environ.get("BIOLOGY_V3_ENABLED") == "1":
     register_student_progress(app, require, page, E)
     register_calendar(app, require, page, token, verifycsrf, E)
     register_live_classroom(app, require, page, token, verifycsrf, E)
+    register_materials_library(app, require, page, token, verifycsrf, E)
+    register_email_notifications(app, require, page, token, verifycsrf, E)
 
 register_biology_activities(app, require, page, token, verifycsrf, E)
 register_shared_whiteboard(app, None, require, page, token, verifycsrf, E)
