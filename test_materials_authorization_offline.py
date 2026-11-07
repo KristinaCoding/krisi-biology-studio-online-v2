@@ -45,8 +45,8 @@ class MaterialsAuthorizationTests(unittest.TestCase):
 
     def test_unassigned_teacher_cannot_download(self):
         client = self.make_client("teacher", TEACHER, False)
-        with patch.object(materials_library, "get_connection", return_value=FakeConnection(False)), \\
-             patch.object(materials_library, "storage_request") as storage, \\
+        with patch.object(materials_library, "get_connection", return_value=FakeConnection(False)), \
+             patch.object(materials_library, "storage_request") as storage, \
              patch("auth_service.get_user_role", return_value="teacher"):
             # Mock session access without requiring a live Supabase session.
             from starlette.requests import Request
@@ -57,8 +57,8 @@ class MaterialsAuthorizationTests(unittest.TestCase):
 
     def test_unassigned_student_cannot_download(self):
         client = self.make_client("student", OTHER, False)
-        with patch.object(materials_library, "get_connection", return_value=FakeConnection(False)), \\
-             patch.object(materials_library, "storage_request") as storage, \\
+        with patch.object(materials_library, "get_connection", return_value=FakeConnection(False)), \
+             patch.object(materials_library, "storage_request") as storage, \
              patch("auth_service.get_user_role", return_value="student"):
             from starlette.requests import Request
             with patch.object(Request, "session", new_callable=lambda: property(lambda self: {"supabase_user_id": OTHER})):
@@ -68,8 +68,8 @@ class MaterialsAuthorizationTests(unittest.TestCase):
 
     def test_authorized_student_download(self):
         client = self.make_client("student", STUDENT, True)
-        with patch.object(materials_library, "get_connection", return_value=FakeConnection(True)), \\
-             patch.object(materials_library, "storage_request", return_value=b"sample") as storage, \\
+        with patch.object(materials_library, "get_connection", return_value=FakeConnection(True)), \
+             patch.object(materials_library, "storage_request", return_value=b"sample") as storage, \
              patch("auth_service.get_user_role", return_value="student"):
             from starlette.requests import Request
             with patch.object(Request, "session", new_callable=lambda: property(lambda self: {"supabase_user_id": STUDENT})):
