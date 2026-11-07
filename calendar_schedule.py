@@ -3,6 +3,7 @@ import calendar
 from datetime import date, datetime
 from urllib.parse import urlencode
 from fastapi import Request, Form, HTTPException
+from email_notifications import notify_student
 from fastapi.responses import RedirectResponse
 
 def register(app, conn, require, page, token, verifycsrf, E):
@@ -114,6 +115,7 @@ def register(app, conn, require, page, token, verifycsrf, E):
                 raise HTTPException(400, "Invalid student")
             c.execute("INSERT INTO calendar_events(student_id,title,starts_at,notes) VALUES(?,?,?,?)",
                       (student_id, title, starts_at, notes))
+        notify_student(conn, student_id, "Biology lesson scheduled: " + title, "Your lesson has been scheduled for " + starts_at + " UTC. Sign in to Biology Studio for details.")
         return RedirectResponse("/calendar", status_code=303)
 
     @app.post("/calendar/events/{event_id}/delete")
@@ -132,6 +134,10 @@ def register(app, conn, require, page, token, verifycsrf, E):
             raise HTTPException(400, "Invalid decision")
         with conn() as c:
             c.execute("UPDATE bookings SET status=? WHERE id=? AND status='Requested'", (decision, booking_id))
+        with conn() as c:
+            booking = c.execute("SELECT student_id,requested FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if booking:
+            notify_student(conn, booking["student_id"], "Biology booking " + decision.lower(), "Your booking for " + booking["requested"] + " UTC has been " + decision.lower() + ".")
         return RedirectResponse("/calendar", status_code=303)
 
     @app.get("/my-calendar")
