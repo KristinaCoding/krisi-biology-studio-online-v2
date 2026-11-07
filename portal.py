@@ -15,6 +15,7 @@ from homework import register as register_homework
 from calendar_schedule import register as register_calendar
 from student_progress import register as register_progress
 from email_notifications import register as register_notifications, notify_student, notify_teacher
+from certificates import register as register_certificates
 
 
 
@@ -79,6 +80,7 @@ register_homework(app, conn, require=lambda req, role: require(req, role), page=
 register_calendar(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 register_progress(app, conn, require=lambda req, role: require(req, role), page=page, E=E)
 register_notifications(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_certificates(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 
 def redirect(url):return RedirectResponse(url,status_code=303)
 
@@ -196,7 +198,7 @@ def teacher(req:Request):
         '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Teacher navigation">'
         '<small>TEACHER WORKSPACE</small>'
         '<a href="#section-1">Invite students</a><a href="#section-2">Lessons</a>'
-        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="/materials">Materials Library</a><a href="/homework">Homework</a><a href="/calendar">Calendar</a><a href="/progress">Student Progress</a><a href="/notifications">Email Notifications</a><a href="#section-4">Results</a>'
+        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="/materials">Materials Library</a><a href="/homework">Homework</a><a href="/calendar">Calendar</a><a href="/progress">Student Progress</a><a href="/notifications">Email Notifications</a><a href="/certificates">Certificates</a><a href="#section-4">Results</a>'
         '<a href="#section-5">Bookings</a></nav><div class="dashboard-main">'
         '<p class="dashboard-intro">Your teaching workspace · Manage lessons and learning in one place.</p>'
         '<div class="dashboard-stats">'
@@ -388,7 +390,7 @@ def student(req:Request):
     body = (
         '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Student navigation">'
         '<small>STUDENT WORKSPACE</small><a href="#section-1">My lessons</a>'
-        '<a href="#section-2">My quizzes</a><a href="/my-materials">My Materials</a><a href="/my-homework">My Homework</a><a href="/my-calendar">My Calendar</a><a href="/my-progress">My Progress</a><a href="#section-3">Book a lesson</a>'
+        '<a href="#section-2">My quizzes</a><a href="/my-materials">My Materials</a><a href="/my-homework">My Homework</a><a href="/my-calendar">My Calendar</a><a href="/my-progress">My Progress</a><a href="/my-certificates">My Certificates</a><a href="#section-3">Book a lesson</a>'
         '</nav><div class="dashboard-main">'
         '<p class="dashboard-intro">Your learning space · Lessons, quizzes and bookings.</p>'
         '<div class="dashboard-stats">'
