@@ -370,6 +370,7 @@ def quiz_builder(req: Request):
         students = c.execute("SELECT id,display FROM users WHERE role='student'").fetchall()
     options = "".join(f'<option value="{s["id"]}">{E(s["display"])}</option>' for s in students)
     body = (
+        '<p><a class="dashboard-return-link" href="/teacher">← Back to Teacher Dashboard</a></p>'
         '<article><h2>Visual quiz builder</h2>'
         '<p>Create multiple-choice questions without writing JSON. Each question has four answers.</p>'
         f'<form method="post" action="/quiz-builder">{token(req)}'
