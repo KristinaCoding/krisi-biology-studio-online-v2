@@ -76,6 +76,11 @@ def find_or_create_portal_user(authenticated):
     supabase_id = authenticated["supabase_user_id"]
     email = authenticated["email"]
     role = authenticated["role"]
+    if not isinstance(supabase_id, str) or not supabase_id.strip():
+        raise HTTPException(403, "Invalid account identity")
+    if not isinstance(email, str):
+        raise HTTPException(403, "Invalid account email")
+    email = email.strip().lower()
 
     if not email or role not in ("teacher", "student"):
         raise HTTPException(403, "Account access denied")
@@ -278,7 +283,9 @@ def student_invite(
         raise HTTPException(502, "Supabase returned no invited user ID")
 
     try:
-        register_invited_student(str(invited_id), display)
+        registered = register_invited_student(str(invited_id), display)
+        if not registered:
+            raise RuntimeError("Student profile already exists; verify the invitation state")
     except Exception:
         raise HTTPException(
             503,
