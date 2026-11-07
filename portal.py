@@ -185,6 +185,39 @@ def login_post(
 def logout(req:Request):
     req.session.clear()
     return redirect("/login")
+def hybrid_navigation(role):
+    """Compact section navigation with accessible, expandable tool groups."""
+    teacher = role == "teacher"
+    groups = (
+        [("People", [("Invite a student", "#section-1"), ("Student progress", "/progress"), ("Certificates", "/certificates")]),
+         ("Teaching", [("Lessons", "#section-2"), ("Quiz Builder", "/quiz-builder"), ("Materials", "/materials"), ("Homework", "/homework"), ("Biology Activities", "/activities")]),
+         ("Schedule", [("Calendar", "/calendar"), ("Bookings", "#section-5"), ("Live Classroom", "/classroom"), ("Whiteboard", "/whiteboard")]),
+         ("Reports & tools", [("Results", "#section-4"), ("Email Notifications", "/notifications")])]
+        if teacher else
+        [("Learning", [("My lessons", "#section-1"), ("My quizzes", "#section-2"), ("Materials", "/my-materials"), ("Homework", "/my-homework"), ("Biology Activities", "/my-activities")]),
+         ("Schedule", [("Book a lesson", "#section-3"), ("Calendar", "/my-calendar"), ("Classroom", "/my-classroom"), ("Whiteboard", "/my-whiteboard")]),
+         ("Achievements", [("My progress", "/my-progress"), ("Certificates", "/my-certificates")])]
+    )
+    menu = '<a class="hybrid-home" href="' + ('/teacher' if teacher else '/student') + '">⌂ Dashboard</a>'
+    for index, (label, links) in enumerate(groups):
+        menu += '<details class="hybrid-group"' + (' open' if index == 0 else '') + '><summary>' + E(label) + '</summary>'
+        menu += ''.join('<a href="' + E(url) + '">' + E(text) + '</a>' for text, url in links)
+        menu += '</details>'
+    return '<nav class="dashboard-nav hybrid-nav" aria-label="' + ('Teacher' if teacher else 'Student') + ' navigation"><small>' + ('TEACHER' if teacher else 'STUDENT') + ' WORKSPACE</small>' + menu + '</nav>'
+
+def dashboard_shortcuts(role):
+    links = (
+        [("Students", "#section-1", "Invitations & profiles"), ("Teaching", "/quiz-builder", "Lessons & assessments"),
+         ("Schedule", "/calendar", "Bookings & classes"), ("Progress", "/progress", "Results & achievements")]
+        if role == "teacher" else
+        [("My Lessons", "#section-1", "Your assigned lessons"), ("My Activities", "/my-activities", "Exercises & quizzes"),
+         ("My Schedule", "/my-calendar", "Upcoming sessions"), ("My Progress", "/my-progress", "Scores & certificates")]
+    )
+    return '<section class="hybrid-shortcuts" aria-label="Quick navigation">' + ''.join(
+        '<a class="hybrid-shortcut" href="' + E(url) + '"><strong>' + E(label) + '</strong><span>' + E(detail) + '</span></a>'
+        for label, url, detail in links
+    ) + '</section>'
+
 @app.get("/teacher")
 def teacher(req:Request):
     require(req,"teacher")
@@ -201,19 +234,16 @@ def teacher(req:Request):
     <article><h2>Bookings</h2><ul>{''.join(f'<li>{E(b["display"])}: {E(b["requested"])} — {E(b["status"])} <form method="post" action="/booking/{b["id"]}">{token(req)}<button name="decision" value="Approved">Approve</button> <button name="decision" value="Declined">Decline</button></form></li>' for b in bookings)}</ul></article>
     <form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Teacher navigation">'
-        '<small>TEACHER WORKSPACE</small>'
-        '<a href="#section-1">Invite students</a><a href="#section-2">Lessons</a>'
-        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="/materials">Materials Library</a><a href="/homework">Homework</a><a href="/calendar">Calendar</a><a href="/progress">Student Progress</a><a href="/notifications">Email Notifications</a><a href="/certificates">Certificates</a><a href="/whiteboard">Whiteboard</a><a href="/classroom">Live Classroom</a><a href="/activities">Biology Activities</a><a href="#section-4">Results</a>'
-        '<a href="#section-5">Bookings</a></nav><div class="dashboard-main">'
-        '<p class="dashboard-intro">Your teaching workspace · Manage lessons and learning in one place.</p>'
-        '<div class="dashboard-stats">'
-        f'<div class="stat-card"><strong>{len(students)}</strong><span>Students</span></div>'
-        f'<div class="stat-card"><strong>{len(results)}</strong><span>Quiz results</span></div>'
-        f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        '</div><div class="dashboard-panels">'
-        + body.replace('<article>', '<article>', 1)
-        + '</div></div></div>'
+        '<div class="dashboard-layout">' + hybrid_navigation("teacher")
+        + '<div class="dashboard-main">'
+        + '<p class="dashboard-intro">Welcome to your teaching workspace. Choose a section to get started.</p>'
+        + dashboard_shortcuts("teacher")
+        + '<div class="dashboard-stats">'
+        + f'<div class="stat-card"><strong>{len(students)}</strong><span>Students</span></div>'
+        + f'<div class="stat-card"><strong>{len(results)}</strong><span>Quiz results</span></div>'
+        + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
+        + '</div><h2 class="hybrid-section-heading">Quick actions & overview</h2><div class="dashboard-panels">'
+        + body + '</div></div></div>'
     )
     for index in range(1, 6):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
@@ -394,16 +424,16 @@ def student(req:Request):
     <article><h2>Request a lesson</h2><form method="post" action="/booking-create">{token(req)}<label>Preferred date and time (UTC)<input type="datetime-local" name="requested" required></label><button>Request booking</button></form>
     <ul>{''.join(f'<li>{E(b["requested"])} — {E(b["status"])}</li>' for b in bookings)}</ul></article><form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Student navigation">'
-        '<small>STUDENT WORKSPACE</small><a href="#section-1">My lessons</a>'
-        '<a href="#section-2">My quizzes</a><a href="/my-materials">My Materials</a><a href="/my-homework">My Homework</a><a href="/my-calendar">My Calendar</a><a href="/my-progress">My Progress</a><a href="/my-certificates">My Certificates</a><a href="/my-whiteboard">My Whiteboard</a><a href="/my-classroom">My Classroom</a><a href="/my-activities">My Activities</a><a href="#section-3">Book a lesson</a>'
-        '</nav><div class="dashboard-main">'
-        '<p class="dashboard-intro">Your learning space · Lessons, quizzes and bookings.</p>'
-        '<div class="dashboard-stats">'
-        f'<div class="stat-card"><strong>{len(lessons)}</strong><span>Lessons</span></div>'
-        f'<div class="stat-card"><strong>{len(quizzes)}</strong><span>Quizzes</span></div>'
-        f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        '</div><div class="dashboard-panels">' + body + '</div></div></div>'
+        '<div class="dashboard-layout">' + hybrid_navigation("student")
+        + '<div class="dashboard-main">'
+        + '<p class="dashboard-intro">Your learning space. Pick a section to continue.</p>'
+        + dashboard_shortcuts("student")
+        + '<div class="dashboard-stats">'
+        + f'<div class="stat-card"><strong>{len(lessons)}</strong><span>Lessons</span></div>'
+        + f'<div class="stat-card"><strong>{len(quizzes)}</strong><span>Quizzes</span></div>'
+        + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
+        + '</div><h2 class="hybrid-section-heading">Your learning overview</h2><div class="dashboard-panels">'
+        + body + '</div></div></div>'
     )
     for index in range(1, 4):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
