@@ -64,7 +64,7 @@ def page(title,body):
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>' + E(title) + ' · KRISI Biology Studio</title>'
-        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css?v=3-simple"></head><body>'
+        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css?v=4-balanced"></head><body>'
         '<div class="studio-shell"><header class="studio-header">'
         '<a class="studio-brand" href="/"><span class="brand-mark">✦</span>'
         '<span><small>KRISI / STUDIO COLLECTION</small><strong>Biology Studio</strong></span></a>'
