@@ -75,6 +75,7 @@ def page(title,body):
         '<p>Choose what you need. Everything else is one click away.</p>'
         '</div><div class="studio-content">' + body + '</div></main>'
         '<footer>KRISI.SITE &nbsp; · &nbsp; LOCAL STUDENT PORTAL PROTOTYPE</footer>'
+        '<script>function openDashboardAnchor(){var id=location.hash.slice(1);if(!id)return;var target=document.getElementById(id);if(!target)return;var panel=target.closest("details");if(panel)panel.open=true;target.scrollIntoView({block:"start"});}window.addEventListener("hashchange",openDashboardAnchor);document.addEventListener("DOMContentLoaded",openDashboardAnchor);</script>'+
         '</div></body></html>'
     )
 
