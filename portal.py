@@ -10,6 +10,15 @@ from password_recovery import router as password_recovery_router
 from auth_service import authenticate_portal_user
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+from materials_library import register as register_materials
+from homework import register as register_homework
+from calendar_schedule import register as register_calendar
+from student_progress import register as register_progress
+from email_notifications import register as register_notifications, notify_student, notify_teacher
+from certificates import register as register_certificates
+from shared_whiteboard import register as register_whiteboard
+from live_classroom import register as register_classroom
+from biology_activities import register as register_activities
 
 
 
@@ -29,12 +38,16 @@ def conn():
     return c
 with conn() as c:
     c.executescript('''
-    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,display TEXT,role TEXT,passhash TEXT);
+    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,display TEXT,role TEXT,passhash TEXT,supabase_user_id TEXT UNIQUE);
     CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,student_id INTEGER,title TEXT,meeting_url TEXT);
     CREATE TABLE IF NOT EXISTS quizzes(id INTEGER PRIMARY KEY,student_id INTEGER,title TEXT,questions TEXT);
     CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY,quiz_id INTEGER,student_id INTEGER,score INTEGER,total INTEGER,UNIQUE(quiz_id,student_id));
     CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,student_id INTEGER,requested TEXT,status TEXT DEFAULT 'Requested');
     ''')
+    columns = {row[1] for row in c.execute('PRAGMA table_info(users)')}
+    if 'supabase_user_id' not in columns:
+        c.execute('ALTER TABLE users ADD COLUMN supabase_user_id TEXT')
+    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_supabase_id ON users(supabase_user_id)')
 def E(x):return html.escape(str(x or ""),quote=True)
 def hashpw(password):
     salt=secrets.token_bytes(16)
@@ -51,19 +64,30 @@ def page(title,body):
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>' + E(title) + ' · KRISI Biology Studio</title>'
-        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css"></head><body>'
+        '<style>' + css + '</style><link rel="stylesheet" href="/static/dashboard_v2.css?v=3-simple"></head><body>'
         '<div class="studio-shell"><header class="studio-header">'
         '<a class="studio-brand" href="/"><span class="brand-mark">✦</span>'
         '<span><small>KRISI / STUDIO COLLECTION</small><strong>Biology Studio</strong></span></a>'
-        '<span class="studio-edition">DARK ACADEMIA · v1.1</span>'
+        '<span class="studio-edition">DARK ACADEMIA · SIMPLE UI</span>'
         '</header><main class="studio-main">'
-        '<div class="studio-hero"><span class="eyebrow">LEARNING & DISCOVERY</span>'
+        '<div class="studio-hero"><span class="eyebrow">BIOLOGY STUDIO · SIMPLE NAVIGATION</span>'
         '<h1>' + E(title) + '</h1>'
-        '<p>A thoughtful space for biology lessons, assessments and learning.</p>'
+        '<p>Choose what you need. Everything else is one click away.</p>'
         '</div><div class="studio-content">' + body + '</div></main>'
         '<footer>KRISI.SITE &nbsp; · &nbsp; LOCAL STUDENT PORTAL PROTOTYPE</footer>'
+        '<script>function openDashboardAnchor(){var id=location.hash.slice(1);if(!id)return;var target=document.getElementById(id);if(!target)return;var panel=target.closest("details");if(panel)panel.open=true;target.scrollIntoView({block:"start"});}window.addEventListener("hashchange",openDashboardAnchor);document.addEventListener("DOMContentLoaded",openDashboardAnchor);</script>'+
         '</div></body></html>'
     )
+
+register_materials(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_homework(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_calendar(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_progress(app, conn, require=lambda req, role: require(req, role), page=page, E=E)
+register_notifications(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_certificates(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_whiteboard(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_classroom(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
+register_activities(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 
 def redirect(url):return RedirectResponse(url,status_code=303)
 
@@ -72,6 +96,11 @@ def find_or_create_portal_user(authenticated):
     supabase_id = authenticated["supabase_user_id"]
     email = authenticated["email"]
     role = authenticated["role"]
+    if not isinstance(supabase_id, str) or not supabase_id.strip():
+        raise HTTPException(403, "Invalid account identity")
+    if not isinstance(email, str):
+        raise HTTPException(403, "Invalid account email")
+    email = email.strip().lower()
 
     if not email or role not in ("teacher", "student"):
         raise HTTPException(403, "Account access denied")
@@ -157,6 +186,49 @@ def login_post(
 def logout(req:Request):
     req.session.clear()
     return redirect("/login")
+def hybrid_navigation(role):
+    """Simple primary navigation; extra tools stay in one expandable menu."""
+    teacher = role == "teacher"
+    home = "/teacher" if teacher else "/student"
+    primary = ([("Home", home), ("Teaching", "/quiz-builder"), ("Schedule", "/calendar"),
+                ("Students & Progress", "/progress")] if teacher else
+               [("Home", home), ("My Learning", "/my-activities"), ("My Schedule", "/my-calendar"),
+                ("My Progress", "/my-progress")])
+    extra = ([("Invite a student", "#section-1"), ("Lessons", "#section-2"),
+              ("Materials", "/materials"), ("Homework", "/homework"), ("Biology Activities", "/activities"),
+              ("Classroom", "/classroom"), ("Whiteboard", "/whiteboard"),
+              ("Certificates", "/certificates"), ("Notifications", "/notifications"),
+              ("Bookings", "#section-5")] if teacher else
+             [("Lessons", "#section-1"), ("Quizzes", "#section-2"),
+              ("Materials", "/my-materials"), ("Homework", "/my-homework"),
+              ("Classroom", "/my-classroom"), ("Whiteboard", "/my-whiteboard"),
+              ("Certificates", "/my-certificates"), ("Book a lesson", "#section-3")])
+    menu = ''.join('<a class="simple-nav-link" href="' + E(url) + '">' + E(label) + '</a>'
+                   for label, url in primary)
+    menu += '<details class="hybrid-group"><summary>More tools</summary>'
+    menu += ''.join('<a href="' + E(url) + '">' + E(label) + '</a>' for label, url in extra)
+    menu += '</details>'
+    return ('<nav class="dashboard-nav hybrid-nav simple-nav" aria-label="Main navigation">'
+            '<small>BIOLOGY STUDIO</small>' + menu + '</nav>')
+
+def dashboard_shortcuts(role):
+    links = (
+        [("Teaching", "/quiz-builder", "Create a quiz"),
+         ("Schedule", "/calendar", "Plan a lesson"),
+         ("Students", "/progress", "See student progress"),
+         ("Materials", "/materials", "Share learning resources")]
+        if role == "teacher" else
+        [("My Learning", "/my-activities", "Start an activity"),
+         ("My Schedule", "/my-calendar", "See upcoming lessons"),
+         ("My Progress", "/my-progress", "Check results"),
+         ("My Materials", "/my-materials", "Open resources")]
+    )
+    return '<section class="hybrid-shortcuts simple-shortcuts" aria-label="Choose what to do">' + ''.join(
+        '<a class="hybrid-shortcut" href="' + E(url) + '"><strong>' + E(label) + '</strong><span>' + E(detail) + '</span></a>'
+        for label, url, detail in links
+    ) + '</section>'
+
+
 @app.get("/teacher")
 def teacher(req:Request):
     require(req,"teacher")
@@ -168,24 +240,21 @@ def teacher(req:Request):
     body=f'''<p>Teacher workspace — separate from your local Streamlit Studio. Data does not synchronize automatically.</p>
     <article><h2>Invite a student</h2><p>Send a secure invitation. Students choose their own passwords.</p><form method="post" action="/student-invite">{token(req)}<label>Student display name<input name="display" maxlength="150" required></label><label>Student email<input name="email" type="email" maxlength="254" required></label><button>Invite Student</button></form></article>
     <article><h2>Assign lesson and meeting link</h2><form method="post" action="/lesson-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><label>Provider meeting link (HTTPS)<input name="meeting_url" type="url"></label><button>Assign lesson</button></form></article>
-    <article><h2>Assign quiz</h2><form method="post" action="/quiz-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><label>Questions JSON<textarea name="questions" rows="7">[{{"question":"Which organelle makes most ATP?","options":["Nucleus","Mitochondrion","Ribosome","Golgi"],"correct":1}}]</textarea></label><button>Assign quiz</button></form></article>
+    <article><h2>Assign quiz</h2><form method="post" action="/quiz-create">{token(req)}<select name="student_id">{options}</select><label>Title<input name="title" required></label><p><a href="/quiz-builder">Open visual quiz builder</a> (no JSON editing required)</p><label>Questions JSON<textarea name="questions" rows="7">[{{"question":"Which organelle makes most ATP?","options":["Nucleus","Mitochondrion","Ribosome","Golgi"],"correct":1}}]</textarea></label><button>Assign quiz</button></form></article>
     <article><h2>Results</h2><ul>{''.join(f'<li>{E(r["display"])} — {E(r["title"])}: {r["score"]}/{r["total"]}</li>' for r in results)}</ul></article>
     <article><h2>Bookings</h2><ul>{''.join(f'<li>{E(b["display"])}: {E(b["requested"])} — {E(b["status"])} <form method="post" action="/booking/{b["id"]}">{token(req)}<button name="decision" value="Approved">Approve</button> <button name="decision" value="Declined">Decline</button></form></li>' for b in bookings)}</ul></article>
     <form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Teacher navigation">'
-        '<small>TEACHER WORKSPACE</small>'
-        '<a href="#section-1">Invite students</a><a href="#section-2">Lessons</a>'
-        '<a href="#section-3">Quizzes</a><a href="#section-4">Results</a>'
-        '<a href="#section-5">Bookings</a></nav><div class="dashboard-main">'
-        '<p class="dashboard-intro">Your teaching workspace · Manage lessons and learning in one place.</p>'
-        '<div class="dashboard-stats">'
-        f'<div class="stat-card"><strong>{len(students)}</strong><span>Students</span></div>'
-        f'<div class="stat-card"><strong>{len(results)}</strong><span>Quiz results</span></div>'
-        f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        '</div><div class="dashboard-panels">'
-        + body.replace('<article>', '<article>', 1)
-        + '</div></div></div>'
+        '<div class="dashboard-layout simple-dashboard">' + hybrid_navigation("teacher")
+        + '<div class="dashboard-main">'
+        + '<p class="dashboard-intro">Welcome to your teaching workspace. Choose a section to get started.</p>'
+        + dashboard_shortcuts("teacher")
+        + '<div class="dashboard-stats">'
+        + f'<div class="stat-card"><strong>{len(students)}</strong><span>Students</span></div>'
+        + f'<div class="stat-card"><strong>{len(results)}</strong><span>Quiz results</span></div>'
+        + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
+        + '</div><details class="simple-actions"><summary>Open advanced teacher tools and forms</summary><div class="dashboard-panels">'
+        + body + '</div></details></div></div>'
     )
     for index in range(1, 6):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
@@ -274,7 +343,9 @@ def student_invite(
         raise HTTPException(502, "Supabase returned no invited user ID")
 
     try:
-        register_invited_student(str(invited_id), display)
+        registered = register_invited_student(str(invited_id), display)
+        if not registered:
+            raise RuntimeError("Student profile already exists; verify the invitation state")
     except Exception:
         raise HTTPException(
             503,
@@ -292,6 +363,53 @@ def lesson_create(req:Request,student_id:int=Form(...),title:str=Form(...),meeti
         if not c.execute("SELECT id FROM users WHERE id=? AND role='student'",(student_id,)).fetchone():raise HTTPException(400)
         c.execute("INSERT INTO lessons(student_id,title,meeting_url) VALUES(?,?,?)",(student_id,title,meeting_url))
     return redirect("/teacher")
+@app.get("/quiz-builder")
+def quiz_builder(req: Request):
+    require(req, "teacher")
+    with conn() as c:
+        students = c.execute("SELECT id,display FROM users WHERE role='student'").fetchall()
+    options = "".join(f'<option value="{s["id"]}">{E(s["display"])}</option>' for s in students)
+    body = (
+        '<p><a class="dashboard-return-link" href="/teacher">← Back to Teacher Dashboard</a></p>'
+        '<article><h2>Visual quiz builder</h2>'
+        '<p>Create multiple-choice questions without writing JSON. Each question has four answers.</p>'
+        f'<form method="post" action="/quiz-builder">{token(req)}'
+        f'<label>Student<select name="student_id" required>{options}</select></label>'
+        '<label>Quiz title<input name="title" maxlength="200" required></label>'
+        '<div id="questions"></div>'
+        '<button type="button" id="add-question">Add question</button>'
+        '<button type="submit">Save quiz</button></form></article>'
+        '<script src="/static/quiz_builder.js" defer></script>'
+    )
+    return page("Visual quiz builder", body)
+
+@app.post("/quiz-builder")
+def quiz_builder_save(req: Request, student_id: int = Form(...), title: str = Form(...),
+                      question: list[str] = Form(...), option_a: list[str] = Form(...),
+                      option_b: list[str] = Form(...), option_c: list[str] = Form(...),
+                      option_d: list[str] = Form(...), correct: list[int] = Form(...),
+                      csrf: str = Form(...)):
+    require(req, "teacher")
+    verifycsrf(req, csrf)
+    lengths = [len(v) for v in (question, option_a, option_b, option_c, option_d, correct)]
+    if len(set(lengths)) != 1 or not 1 <= lengths[0] <= 30:
+        raise HTTPException(400, "Quiz must have 1 to 30 complete questions")
+    items = []
+    for i in range(lengths[0]):
+        opts = [option_a[i].strip(), option_b[i].strip(), option_c[i].strip(), option_d[i].strip()]
+        prompt = question[i].strip()
+        if not prompt or len(prompt) > 1000 or any(not o or len(o) > 500 for o in opts) or correct[i] not in range(4):
+            raise HTTPException(400, "Invalid question or answer")
+        items.append({"question": prompt, "options": opts, "correct": correct[i]})
+    if not title.strip() or len(title) > 200:
+        raise HTTPException(400, "Invalid quiz title")
+    with conn() as c:
+        if not c.execute("SELECT id FROM users WHERE id=? AND role='student'", (student_id,)).fetchone():
+            raise HTTPException(400, "Invalid student")
+        c.execute("INSERT INTO quizzes(student_id,title,questions) VALUES(?,?,?)",
+                  (student_id, title.strip(), json.dumps(items)))
+    return redirect("/teacher")
+
 @app.post("/quiz-create")
 def quiz_create(req:Request,student_id:int=Form(...),title:str=Form(...),questions:str=Form(...),csrf:str=Form(...)):
     require(req,"teacher");verifycsrf(req,csrf)
@@ -318,16 +436,16 @@ def student(req:Request):
     <article><h2>Request a lesson</h2><form method="post" action="/booking-create">{token(req)}<label>Preferred date and time (UTC)<input type="datetime-local" name="requested" required></label><button>Request booking</button></form>
     <ul>{''.join(f'<li>{E(b["requested"])} — {E(b["status"])}</li>' for b in bookings)}</ul></article><form method="post" action="/logout"><button>Sign out</button></form>'''
     body = (
-        '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Student navigation">'
-        '<small>STUDENT WORKSPACE</small><a href="#section-1">My lessons</a>'
-        '<a href="#section-2">My quizzes</a><a href="#section-3">Book a lesson</a>'
-        '</nav><div class="dashboard-main">'
-        '<p class="dashboard-intro">Your learning space · Lessons, quizzes and bookings.</p>'
-        '<div class="dashboard-stats">'
-        f'<div class="stat-card"><strong>{len(lessons)}</strong><span>Lessons</span></div>'
-        f'<div class="stat-card"><strong>{len(quizzes)}</strong><span>Quizzes</span></div>'
-        f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
-        '</div><div class="dashboard-panels">' + body + '</div></div></div>'
+        '<div class="dashboard-layout simple-dashboard">' + hybrid_navigation("student")
+        + '<div class="dashboard-main">'
+        + '<p class="dashboard-intro">Your learning space. Pick a section to continue.</p>'
+        + dashboard_shortcuts("student")
+        + '<div class="dashboard-stats">'
+        + f'<div class="stat-card"><strong>{len(lessons)}</strong><span>Lessons</span></div>'
+        + f'<div class="stat-card"><strong>{len(quizzes)}</strong><span>Quizzes</span></div>'
+        + f'<div class="stat-card"><strong>{len(bookings)}</strong><span>Bookings</span></div>'
+        + '</div><details class="simple-actions"><summary>Open my lessons, quizzes and booking form</summary><div class="dashboard-panels">'
+        + body + '</div></div></div>'
     )
     for index in range(1, 4):
         body = body.replace('<article>', f'<article id="section-{index}">', 1)
@@ -339,12 +457,17 @@ def booking_create(req:Request,requested:str=Form(...),csrf:str=Form(...)):
         if datetime.fromisoformat(requested)<=datetime.now():raise ValueError()
     except ValueError:raise HTTPException(400,"Select a future time")
     with conn() as c:c.execute("INSERT INTO bookings(student_id,requested) VALUES(?,?)",(u["id"],requested))
+    notify_teacher(conn, "New biology lesson booking request", "A student requested a lesson for " + requested + " UTC. Sign in to Biology Studio to review.")
     return redirect("/student")
 @app.post("/booking/{bid}")
 def booking_decide(req:Request,bid:int,decision:str=Form(...),csrf:str=Form(...)):
     require(req,"teacher");verifycsrf(req,csrf)
     if decision not in ("Approved","Declined"):raise HTTPException(400)
     with conn() as c:c.execute("UPDATE bookings SET status=? WHERE id=?",(decision,bid))
+    with conn() as c:
+        booking = c.execute("SELECT student_id,requested FROM bookings WHERE id=?", (bid,)).fetchone()
+    if booking:
+        notify_student(conn, booking["student_id"], "Biology booking " + decision.lower(), "Your booking for " + booking["requested"] + " UTC has been " + decision.lower() + ".")
     return redirect("/teacher")
 @app.get("/quiz/{qid}")
 def quiz_view(req:Request,qid:int):
