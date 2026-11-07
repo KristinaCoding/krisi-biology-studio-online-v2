@@ -14,6 +14,9 @@ def register(app, conn, require, page, E):
             homework = c.execute("""SELECT h.title, h.due_at, s.submitted_at, s.grade, s.feedback
                 FROM homework h LEFT JOIN homework_submissions s ON s.homework_id=h.id
                 WHERE h.student_id=? ORDER BY h.id DESC""", (student_id,)).fetchall()
+            activities = c.execute("""SELECT a.title, r.score, r.total FROM biology_activities a
+                LEFT JOIN biology_activity_results r ON r.activity_id=a.id
+                WHERE a.student_id=? ORDER BY a.id DESC""", (student_id,)).fetchall()
         completed = [q for q in quizzes if q["score"] is not None and q["total"] is not None]
         points = sum(q["score"] for q in completed)
         possible = sum(q["total"] for q in completed)
@@ -39,9 +42,16 @@ def register(app, conn, require, page, E):
             f'<td>{E(h["feedback"])}</td></tr>'
             for h in homework
         )
+        activity_rows = ''.join(
+            f'<tr><td>{E(a["title"])}</td><td>{str(a["score"]) + "/" + str(a["total"]) if a["score"] is not None else "Not completed"}</td></tr>'
+            for a in activities
+        )
         return (
             f'<h2>{E(student["display"])}</h2>'
             + stats
+            + '<article><h2>Interactive biology activities</h2><table><thead><tr><th>Activity</th><th>Score</th></tr></thead><tbody>'
+            + (activity_rows or '<tr><td colspan="2">No activities assigned.</td></tr>')
+            + '</tbody></table></article>'
             + '<article><h2>Quiz results</h2><table><thead><tr><th>Quiz</th><th>Score</th></tr></thead><tbody>'
             + (quiz_rows or '<tr><td colspan="2">No quizzes assigned.</td></tr>')
             + '</tbody></table></article>'
