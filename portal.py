@@ -14,6 +14,7 @@ from password_recovery import router as password_recovery_router
 from auth_service import authenticate_portal_user
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+from biology_activities import register as register_biology_activities
 
 SECRET=os.environ.get("PORTAL_SECRET","")
 if len(SECRET)<32: raise RuntimeError("Set PORTAL_SECRET to a random 32+ character value")
@@ -1129,6 +1130,8 @@ async def quiz_submit(req: Request, qid: str):
         f"<article>Score: {score}/{len(questions)}</article>"
         "<a href='/student'>Back</a>"
     )
+
+register_biology_activities(app, require, page, token, verifycsrf, E)
 
 app.mount(
     "/static",
