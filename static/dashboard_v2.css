@@ -62,3 +62,18 @@ body{background:radial-gradient(ellipse at 85% 0%,#39242e,#120e13 65%)!important
 .simple-dashboard .dashboard-stats{margin-top:8px}
 @media(max-width:850px){.simple-dashboard{grid-template-columns:1fr}.simple-nav{display:flex;flex-direction:row;flex-wrap:wrap}.simple-nav small{width:100%}.simple-nav .simple-nav-link{flex:1 1 135px;text-align:center}.simple-nav .hybrid-group{width:100%}}
 @media(max-width:550px){.simple-shortcuts{grid-template-columns:1fr;gap:12px}.simple-shortcuts .hybrid-shortcut{min-height:112px;padding:19px}.simple-shortcuts .hybrid-shortcut strong{font-size:22px}.simple-actions{padding:12px}}
+
+/* Balanced teacher/student dashboards: symmetric cards, no decorative palette. */
+.simple-dashboard .simple-shortcuts{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:stretch}
+.simple-dashboard .simple-shortcuts .hybrid-shortcut{height:100%;min-height:110px;padding:18px;justify-content:center;gap:7px;border-radius:14px}
+.simple-dashboard .simple-shortcuts .hybrid-shortcut strong{font-size:19px;line-height:1.25}
+.simple-dashboard .simple-shortcuts .hybrid-shortcut span{font-size:12px}
+.simple-dashboard .dashboard-stats{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:12px}
+.simple-dashboard .dashboard-stats .stat-card{min-height:94px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;padding:18px}
+.simple-dashboard .simple-actions{width:100%;box-sizing:border-box;clear:both}
+.simple-dashboard .simple-actions .dashboard-panels{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:16px}
+.simple-dashboard .simple-actions .dashboard-panels article{grid-column:auto!important;min-width:0;box-sizing:border-box;height:100%;padding:20px!important}
+.simple-dashboard .simple-actions .dashboard-panels article:last-child:nth-child(odd){grid-column:1/-1!important}
+@media(max-width:1200px){.simple-dashboard .simple-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.simple-dashboard .dashboard-stats{grid-template-columns:1fr}.simple-dashboard .simple-actions .dashboard-panels{grid-template-columns:1fr}.simple-dashboard .simple-actions .dashboard-panels article:last-child:nth-child(odd){grid-column:auto!important}}
+@media(max-width:380px){.simple-dashboard .simple-shortcuts{grid-template-columns:1fr}}
