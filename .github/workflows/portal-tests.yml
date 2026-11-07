@@ -1,0 +1,28 @@
+name: Portal regression tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/biology-studio-v3-foundation
+  workflow_dispatch:
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile application
+        run: python -m compileall -q portal.py auth_service.py database.py student_activation_api.py test_portal_identity.py
+      - name: Run isolated identity tests
+        env:
+          PORTAL_SECRET: ci-only-test-secret-with-at-least-32-characters
+        run: python -m unittest -v test_portal_identity
