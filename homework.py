@@ -1,6 +1,7 @@
 """Teacher-assigned homework with student submissions and feedback."""
 from datetime import datetime
 from fastapi import Request, Form, HTTPException
+from email_notifications import notify_student
 from fastapi.responses import RedirectResponse
 
 def register(app, conn, require, page, token, verifycsrf, E):
@@ -86,6 +87,7 @@ def register(app, conn, require, page, token, verifycsrf, E):
                 raise HTTPException(400, "Choose a valid student")
             c.execute("INSERT INTO homework(student_id,title,instructions,due_at) VALUES(?,?,?,?)",
                       (student_id, title, instructions, due_at))
+        notify_student(conn, student_id, "New biology homework: " + title, "You have a new assignment: " + title + "\nDue (UTC): " + due_at + "\nSign in to Biology Studio to read the instructions.")
         return go("/homework")
 
     @app.get("/my-homework")
