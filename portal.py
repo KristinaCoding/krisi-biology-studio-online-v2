@@ -14,6 +14,7 @@ from materials_library import register as register_materials
 from homework import register as register_homework
 from calendar_schedule import register as register_calendar
 from student_progress import register as register_progress
+from email_notifications import register as register_notifications, notify_student, notify_teacher
 
 
 
@@ -77,6 +78,7 @@ register_materials(app, conn, require=lambda req, role: require(req, role), page
 register_homework(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 register_calendar(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 register_progress(app, conn, require=lambda req, role: require(req, role), page=page, E=E)
+register_notifications(app, conn, require=lambda req, role: require(req, role), page=page, token=lambda req: token(req), verifycsrf=lambda req, csrf: verifycsrf(req, csrf), E=E)
 
 def redirect(url):return RedirectResponse(url,status_code=303)
 
@@ -194,7 +196,7 @@ def teacher(req:Request):
         '<div class="dashboard-layout"><nav class="dashboard-nav" aria-label="Teacher navigation">'
         '<small>TEACHER WORKSPACE</small>'
         '<a href="#section-1">Invite students</a><a href="#section-2">Lessons</a>'
-        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="/materials">Materials Library</a><a href="/homework">Homework</a><a href="/calendar">Calendar</a><a href="/progress">Student Progress</a><a href="#section-4">Results</a>'
+        '<a href="#section-3">Quizzes</a><a href="/quiz-builder">Quiz Builder</a><a href="/materials">Materials Library</a><a href="/homework">Homework</a><a href="/calendar">Calendar</a><a href="/progress">Student Progress</a><a href="/notifications">Email Notifications</a><a href="#section-4">Results</a>'
         '<a href="#section-5">Bookings</a></nav><div class="dashboard-main">'
         '<p class="dashboard-intro">Your teaching workspace · Manage lessons and learning in one place.</p>'
         '<div class="dashboard-stats">'
@@ -405,12 +407,17 @@ def booking_create(req:Request,requested:str=Form(...),csrf:str=Form(...)):
         if datetime.fromisoformat(requested)<=datetime.now():raise ValueError()
     except ValueError:raise HTTPException(400,"Select a future time")
     with conn() as c:c.execute("INSERT INTO bookings(student_id,requested) VALUES(?,?)",(u["id"],requested))
+    notify_teacher(conn, "New biology lesson booking request", "A student requested a lesson for " + requested + " UTC. Sign in to Biology Studio to review.")
     return redirect("/student")
 @app.post("/booking/{bid}")
 def booking_decide(req:Request,bid:int,decision:str=Form(...),csrf:str=Form(...)):
     require(req,"teacher");verifycsrf(req,csrf)
     if decision not in ("Approved","Declined"):raise HTTPException(400)
     with conn() as c:c.execute("UPDATE bookings SET status=? WHERE id=?",(decision,bid))
+    with conn() as c:
+        booking = c.execute("SELECT student_id,requested FROM bookings WHERE id=?", (bid,)).fetchone()
+    if booking:
+        notify_student(conn, booking["student_id"], "Biology booking " + decision.lower(), "Your booking for " + booking["requested"] + " UTC has been " + decision.lower() + ".")
     return redirect("/teacher")
 @app.get("/quiz/{qid}")
 def quiz_view(req:Request,qid:int):
